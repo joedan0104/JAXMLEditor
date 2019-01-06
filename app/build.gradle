@@ -1,0 +1,37 @@
+apply plugin: 'java'
+
+sourceCompatibility = "1.7"
+targetCompatibility = "1.7"
+
+// 构建需要依赖的包
+dependencies {
+    compile files('libs/kxml2-2.3.0.jar')
+    compile files('libs/xmlpull_1_1_3_4c.jar')
+    implementation files('libs/classes.jar')
+}
+
+task makeJar(type: Copy) {
+    // 删除存在的Jar文件
+//    delete 'build/libs/*.jar'
+    // 设置拷贝目录
+    from fileTree(file('libs/kxml2-2.3.0.jar'))
+    from fileTree(file('libs/xmlpull_1_1_3_4c.jar'))
+    from fileTree(dir: 'src/main')
+
+    destinationDir = file('build/libs/')
+
+//    into('build/libs/')
+    // 将app.jar放入build/libs/下
+    // include、exclude参数来设置过滤
+    // 我们只关心app.jar这个文件
+//    include('app.jar')
+//    // 重命名
+//    rename('app.jar', 'AXMLEditor.jar')
+
+//    from zipTree(zipFile)
+//    from fileTree(dir: 'src/main',includes: ['libs/**'])//将assets目录打入jar包
+//    baseName = SDK_BASENAME
+//    destinationDir = file(sdkDestinationPath)
+}
+
+//makeJar.dependsOn(deleteBuild, build)
