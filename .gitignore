@@ -29,4 +29,6 @@ local.properties
 DS_Store
 res/drawable-hdpi/.DS_Store
 captures/*
+AndroidManifest*
+*.jar
 

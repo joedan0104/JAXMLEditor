@@ -1,11 +1,12 @@
 package cn.wjdiankong.main;
 
-import java.io.FileInputStream;
-import java.io.IOException;
-
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 import org.xmlpull.v1.XmlPullParserFactory;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.logging.Logger;
 
 import cn.wjdiankong.chunk.AttributeData;
 import cn.wjdiankong.chunk.EndTagChunk;
@@ -136,30 +137,18 @@ public class XmlEditor {
     }
 
     /**
-     * 更新标签
+     * 删除TAG节点一个属性
      *
-     * @param tag       : 标签名称
-     * @param tagId     : 标签唯一标识。标签属性或者属性值对应的唯一唯一标识
-     * @param attrName  : 需要修改属性值对应的属性名
-     * @param attrValue : 需要修改的目标属性值
+     * @param tag         : 标签名称
+     * @param attrNameId  : 标签唯一标识对应的属性名称
+     * @param attrValueId : 标签唯一标识对应的属性值
+     * @param attrName    : 需要删除的目标属性值
      */
-    public static void modifyTag(String tag, String tagId, String attrName, String attrValue) {
+    public static void removeTagAttr(String tag, String attrNameId, String attrValueId, String attrName) {
         ParserChunkUtils.parserXml();
-        //构造一个属性出来
-        int[] type = getAttrType(attrValue);
-        int attrname = getStrIndex(attrName);
-        int attrvalue = getStrIndex(attrValue);
-        int attruri = getStrIndex(prefixStr);
-
-        int attrtype = type[0];//属性类型
-        int attrdata = type[1];//属性值，是int类型
-
-        AttributeData data = AttributeData.createAttribute(attruri, attrname, attrvalue, attrtype, attrdata);
-
 
         boolean bFind = false;
         for (StartTagChunk chunk : ParserChunkUtils.xmlStruct.startTagChunkList) {
-
             int tagNameIndex = Utils.byte2int(chunk.name);
             String tagNameTmp = ParserChunkUtils.xmlStruct.stringChunk.stringContentList.get(tagNameIndex);
             if (tag.equals(tagNameTmp)) {
@@ -168,7 +157,7 @@ public class XmlEditor {
                 if (tag.equals("application") || tag.equals("manifest")) {
                     // 还得修改对应的tag chunk中属性个个数和大小
                     int countStart = chunk.offset + 28;
-                    byte[] modifyByte = Utils.int2Byte(chunk.attrList.size() + 1);
+                    byte[] modifyByte = Utils.int2Byte(chunk.attrList.size() - 1);
                     ParserChunkUtils.xmlStruct.byteSrc = Utils.replaceBytes(ParserChunkUtils.xmlStruct.byteSrc, modifyByte, countStart);
 
                     //修改chunk的大小
@@ -186,11 +175,12 @@ public class XmlEditor {
 
                 for (AttributeData attrData : chunk.attrList) {
                     String attrNameTemp = ParserChunkUtils.xmlStruct.stringChunk.stringContentList.get(attrData.name);
-                    if ("name".equals(attrNameTemp)) {
+                    if (attrNameId.equals(attrNameTemp)) {
                         //得先找到tag对应的唯一名称
                         String value = ParserChunkUtils.xmlStruct.stringChunk.stringContentList.get(attrData.valueString);
-                        if (tag.equals(value)) {
-                            //找到指定的tag开始修改
+                        Logger.getGlobal().info("attrName:" + attrNameTemp + " value:" + value);
+                        if (attrValueId.equals(value)) {
+                            //找到指定的tag标签开始修改
                             bFind = true;
                             break;
                         }
@@ -198,20 +188,109 @@ public class XmlEditor {
                 }
 
                 if (bFind) {
+                    // 找到对应标记以后修改对应属性的属性值
                     for (AttributeData attrData : chunk.attrList) {
                         String attrNameTemp = ParserChunkUtils.xmlStruct.stringChunk.stringContentList.get(attrData.name);
                         if (attrName.equals(attrNameTemp)) {
-                            //修改对应的属性值
-                            data.nameB = Utils.int2Byte(attrname);
-                            attrData.valueStringB = Utils.int2Byte(attrvalue);
-                            data.typeB = Utils.int2Byte(attrtype);
-                            data.dataB = Utils.int2Byte(attrdata);
+                            // 1）删除原有属性
+                            String value = ParserChunkUtils.xmlStruct.stringChunk.stringContentList.get(attrData.valueString);
+                            Logger.getGlobal().info("removeTagAttr delete attrName:" + attrNameTemp + " value:" + value);
+                            //还得修改对应的tag chunk中属性个个数和大小
+                            int countStart = chunk.offset + 28;
+                            byte[] modifyByte = Utils.int2Byte(chunk.attrList.size() - 1);
+                            ParserChunkUtils.xmlStruct.byteSrc = Utils.replaceBytes(ParserChunkUtils.xmlStruct.byteSrc, modifyByte, countStart);
 
                             //修改chunk的大小
                             int chunkSizeStart = chunk.offset + 4;
                             int chunkSize = Utils.byte2int(chunk.size);
-                            byte[] modifyByteSize = Utils.int2Byte(chunkSize + 20);
+                            byte[] modifyByteSize = Utils.int2Byte(chunkSize - 20);
                             ParserChunkUtils.xmlStruct.byteSrc = Utils.replaceBytes(ParserChunkUtils.xmlStruct.byteSrc, modifyByteSize, chunkSizeStart);
+
+                            //删除属性内容
+                            int delStart = attrData.offset;
+                            int delSize = attrData.getLen();
+                            ParserChunkUtils.xmlStruct.byteSrc = Utils.removeByte(ParserChunkUtils.xmlStruct.byteSrc, delStart, delSize);
+
+                            modifyFileSize();
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * TAG节点添加一个属性
+     *
+     * @param tag         : 标签名称
+     * @param attrNameId  : 标签唯一标识对应的属性名称
+     * @param attrValueId : 标签唯一标识对应的属性值
+     * @param attrName    : 需要添加的目标属性的属性名值
+     * @param attrValue   : 需要添加的目标属性的属性值
+     */
+    public static void addTagAttr(String tag, String attrNameId, String attrValueId, String attrName, String attrValue) {
+        ParserChunkUtils.parserXml();
+        //构造一个属性出来
+        int[] type = getAttrType(attrValue);
+        int attrname = getStrIndex(attrName);
+        int attrvalue = getStrIndex(attrValue);
+        int attruri = getStrIndex(prefixStr);
+
+        int attrtype = type[0];//属性类型
+        int attrdata = type[1];//属性值，是int类型
+
+        // 创建新添加属性数据
+        AttributeData data = AttributeData.createAttribute(attruri, attrname, attrvalue, attrtype, attrdata);
+
+        for (StartTagChunk chunk : ParserChunkUtils.xmlStruct.startTagChunkList) {
+
+            int tagNameIndex = Utils.byte2int(chunk.name);
+            String tagNameTmp = ParserChunkUtils.xmlStruct.stringChunk.stringContentList.get(tagNameIndex);
+            if (tag.equals(tagNameTmp)) {
+
+                //如果是application，manifest标签直接处理就好
+                if (tag.equals("application") || tag.equals("manifest")) {
+                    // 还得修改对应的tag chunk中属性个个数和大小
+                    int countStart = chunk.offset + 28;
+                    byte[] modifyByte = Utils.int2Byte(chunk.attrList.size() - 1);
+                    ParserChunkUtils.xmlStruct.byteSrc = Utils.replaceBytes(ParserChunkUtils.xmlStruct.byteSrc, modifyByte, countStart);
+
+                    //修改chunk的大小
+                    int chunkSizeStart = chunk.offset + 4;
+                    int chunkSize = Utils.byte2int(chunk.size);
+                    byte[] modifyByteSize = Utils.int2Byte(chunkSize + 20);
+                    ParserChunkUtils.xmlStruct.byteSrc = Utils.replaceBytes(ParserChunkUtils.xmlStruct.byteSrc, modifyByteSize, chunkSizeStart);
+
+                    modifStringChunk();
+
+                    modifyFileSize();
+
+                    return;
+                }
+
+                for (AttributeData attrData : chunk.attrList) {
+                    String attrNameTemp = ParserChunkUtils.xmlStruct.stringChunk.stringContentList.get(attrData.name);
+                    if (attrNameId.equals(attrNameTemp)) {
+                        //得先找到tag对应的唯一名称
+                        String value = ParserChunkUtils.xmlStruct.stringChunk.stringContentList.get(attrData.valueString);
+                        Logger.getGlobal().info("addTagAttr attrName:" + attrNameTemp + " value:" + value);
+                        if (attrValueId.equals(value)) {
+                            //找到指定的tag标签开始修改
+                            // 插入新的属性值
+                            //还得修改对应的tag chunk中属性个个数和大小
+                            int countStart = chunk.offset + 28;
+                            byte[] modifyByte = Utils.int2Byte(chunk.attrList.size() + 1);
+                            ParserChunkUtils.xmlStruct.byteSrc = Utils.replaceBytes(ParserChunkUtils.xmlStruct.byteSrc, modifyByte, countStart);
+
+                            //修改chunk的大小(一个属性块是20个字节)
+                            int chunkSizeStart = chunk.offset + 4;
+                            int chunkSize = Utils.byte2int(chunk.size);
+                            byte[]  modifyByteSize = Utils.int2Byte(chunkSize + 20);
+                            ParserChunkUtils.xmlStruct.byteSrc = Utils.replaceBytes(ParserChunkUtils.xmlStruct.byteSrc, modifyByteSize, chunkSizeStart);
+
+                            //添加属性内容到原来的chunk上
+                            ParserChunkUtils.xmlStruct.byteSrc = Utils.insertByte(ParserChunkUtils.xmlStruct.byteSrc, chunk.offset + chunkSize, data.getByte());
 
                             modifStringChunk();
 
@@ -226,11 +305,149 @@ public class XmlEditor {
     }
 
     /**
+     * 更新标签
+     *
+     * @param tag       : 标签名称
+     * @param tagId     : 标签唯一标识。标签属性或者属性值对应的唯一唯一标识
+     * @param attrName  : 需要修改属性值对应的属性名
+     * @param attrValue : 需要修改的目标属性值
+     */
+    public static void modifyTag(String tag, String tagId, String attrName, String attrValue) {
+        ParserChunkUtils.parserXml();
+        XmlEditor.removeTagAttr(tag, "name", tagId, attrName);
+        // 添加新属性
+        ParserChunkUtils.parserXml();
+        XmlEditor.addTagAttr(tag, "name", tagId, attrName, attrValue);
+//        //构造一个属性出来
+//        int[] type = getAttrType(attrValue);
+//        int attrname = getStrIndex(attrName);
+//        int attrvalue = getStrIndex(attrValue);
+//        int attruri = getStrIndex(prefixStr);
+//
+//        int attrtype = type[0];//属性类型
+//        int attrdata = type[1];//属性值，是int类型
+//
+//        AttributeData data = AttributeData.createAttribute(attruri, attrname, attrvalue, attrtype, attrdata);
+//
+//
+//        boolean bFind = false;
+//        for (StartTagChunk chunk : ParserChunkUtils.xmlStruct.startTagChunkList) {
+//
+//            int tagNameIndex = Utils.byte2int(chunk.name);
+//            String tagNameTmp = ParserChunkUtils.xmlStruct.stringChunk.stringContentList.get(tagNameIndex);
+//            if (tag.equals(tagNameTmp)) {
+//
+//                //如果是application，manifest标签直接处理就好
+//                if (tag.equals("application") || tag.equals("manifest")) {
+//                    // 还得修改对应的tag chunk中属性个个数和大小
+//                    int countStart = chunk.offset + 28;
+//                    byte[] modifyByte = Utils.int2Byte(chunk.attrList.size() - 1);
+//                    ParserChunkUtils.xmlStruct.byteSrc = Utils.replaceBytes(ParserChunkUtils.xmlStruct.byteSrc, modifyByte, countStart);
+//
+//                    //修改chunk的大小
+//                    int chunkSizeStart = chunk.offset + 4;
+//                    int chunkSize = Utils.byte2int(chunk.size);
+//                    byte[] modifyByteSize = Utils.int2Byte(chunkSize + 20);
+//                    ParserChunkUtils.xmlStruct.byteSrc = Utils.replaceBytes(ParserChunkUtils.xmlStruct.byteSrc, modifyByteSize, chunkSizeStart);
+//
+//                    modifStringChunk();
+//
+//                    modifyFileSize();
+//
+//                    return;
+//                }
+//
+//                for (AttributeData attrData : chunk.attrList) {
+//                    String attrNameTemp = ParserChunkUtils.xmlStruct.stringChunk.stringContentList.get(attrData.name);
+//                    if ("name".equals(attrNameTemp)) {
+//                        //得先找到tag对应的唯一名称
+//                        String value = ParserChunkUtils.xmlStruct.stringChunk.stringContentList.get(attrData.valueString);
+//                        Logger.getGlobal().info("attrName:" + attrNameTemp + " value:" + value);
+//                        if (tagId.equals(value)) {
+//                            //找到指定的tag标签开始修改
+//                            bFind = true;
+//                            break;
+//                        }
+//                    }
+//                }
+//
+//                if (bFind) {
+//                    // 找到对应标记以后修改对应属性的属性值
+//                    for (AttributeData attrData : chunk.attrList) {
+//                        String attrNameTemp = ParserChunkUtils.xmlStruct.stringChunk.stringContentList.get(attrData.name);
+//                        if (attrName.equals(attrNameTemp)) {
+//
+//                            // 1）删除原有属性
+//                            //还得修改对应的tag chunk中属性个个数和大小
+//                            int countStart = chunk.offset + 28;
+//                            byte[] modifyByte = Utils.int2Byte(chunk.attrList.size() - 1);
+//                            ParserChunkUtils.xmlStruct.byteSrc = Utils.replaceBytes(ParserChunkUtils.xmlStruct.byteSrc, modifyByte, countStart);
+//
+//                            //修改chunk的大小
+//                            int chunkSizeStart = chunk.offset + 4;
+//                            int chunkSize = Utils.byte2int(chunk.size);
+//                            byte[] modifyByteSize = Utils.int2Byte(chunkSize - 20);
+//                            ParserChunkUtils.xmlStruct.byteSrc = Utils.replaceBytes(ParserChunkUtils.xmlStruct.byteSrc, modifyByteSize, chunkSizeStart);
+//
+//                            //删除属性内容
+//                            int delStart = attrData.offset;
+//                            int delSize = attrData.getLen();
+//                            ParserChunkUtils.xmlStruct.byteSrc = Utils.removeByte(ParserChunkUtils.xmlStruct.byteSrc, delStart, delSize);
+//
+//                            modifyFileSize();
+//
+////                            // 2）插入新的属性值
+////                            //还得修改对应的tag chunk中属性个个数和大小
+////                            countStart = chunk.offset + 28;
+////                            modifyByte = Utils.int2Byte(chunk.attrList.size() + 1);
+////                            ParserChunkUtils.xmlStruct.byteSrc = Utils.replaceBytes(ParserChunkUtils.xmlStruct.byteSrc, modifyByte, countStart);
+////
+////                            //修改chunk的大小(一个属性块是20个字节)
+////                            chunkSizeStart = chunk.offset + 4;
+////                            chunkSize = Utils.byte2int(chunk.size);
+////                            modifyByteSize = Utils.int2Byte(chunkSize + 20);
+////                            ParserChunkUtils.xmlStruct.byteSrc = Utils.replaceBytes(ParserChunkUtils.xmlStruct.byteSrc, modifyByteSize, chunkSizeStart);
+////
+////                            //添加属性内容到原来的chunk上
+////                            ParserChunkUtils.xmlStruct.byteSrc = Utils.insertByte(ParserChunkUtils.xmlStruct.byteSrc, chunk.offset + chunkSize, data.getByte());
+////
+////                            modifStringChunk();
+////
+////                            modifyFileSize();
+//
+////                            //修改对应的属性值
+////                            data.nameB = Utils.int2Byte(attrname);
+////                            attrData.valueStringB = Utils.int2Byte(attrvalue);
+////                            data.typeB = Utils.int2Byte(attrtype);
+////                            data.dataB = Utils.int2Byte(attrdata);
+////
+////                            //修改chunk的大小
+////                            int chunkSizeStart = chunk.offset + 4;
+////                            int chunkSize = Utils.byte2int(chunk.size);
+////                            byte[] modifyByteSize = Utils.int2Byte(chunkSize + 20);
+////                            ParserChunkUtils.xmlStruct.byteSrc = Utils.replaceBytes(ParserChunkUtils.xmlStruct.byteSrc, modifyByteSize, chunkSizeStart);
+////
+////                            modifStringChunk();
+////
+////                            modifyFileSize();
+//
+//
+//
+//
+//                            return;
+//                        }
+//                    }
+//                }
+//            }
+//        }
+    }
+
+    /**
      * 删除属性
      *
-     * @param tag
-     * @param tagName
-     * @param attrName
+     * @param tag      : 标签名称
+     * @param tagName  : 标签属性唯一标识
+     * @param attrName : 属性名称
      */
     public static void removeAttr(String tag, String tagName, String attrName) {
         ParserChunkUtils.parserXml();
@@ -275,7 +492,8 @@ public class XmlEditor {
                 //否则需要通过name找到指定的tag
                 for (AttributeData attrData : chunk.attrList) {
                     String attrNameTemp = ParserChunkUtils.xmlStruct.stringChunk.stringContentList.get(attrData.name);
-                    if ("name".equals(attrNameTemp)) {//得先找到tag对应的唯一名称
+                    if ("name".equals(attrNameTemp)) {
+                        //得先找到tag对应的唯一名称
                         String value = ParserChunkUtils.xmlStruct.stringChunk.stringContentList.get(attrData.valueString);
                         if (tagName.equals(value)) {
                             for (AttributeData data : chunk.attrList) {
@@ -346,7 +564,6 @@ public class XmlEditor {
         int attrname = getStrIndex(attrName);
         int attrvalue = getStrIndex(attrValue);
         int attruri = getStrIndex(prefixStr);
-        ;
         int attrtype = type[0];//属性类型
         int attrdata = type[1];//属性值，是int类型
 
@@ -391,7 +608,7 @@ public class XmlEditor {
                         byte[] modifyByte = Utils.int2Byte(chunk.attrList.size() + 1);
                         ParserChunkUtils.xmlStruct.byteSrc = Utils.replaceBytes(ParserChunkUtils.xmlStruct.byteSrc, modifyByte, countStart);
 
-                        //修改chunk的大小
+                        //修改chunk的大小(一个属性块是20个字节)
                         int chunkSizeStart = chunk.offset + 4;
                         int chunkSize = Utils.byte2int(chunk.size);
                         byte[] modifyByteSize = Utils.int2Byte(chunkSize + 20);
