@@ -8,7 +8,7 @@ import java.io.IOException;
 
 public class Main {
 
-    private final static String CMD_TXT = "[usage java -jar AXMLEditor.jar [-tag|-attr] [-i|-r|-m] [标签名|标签唯一ID|属性名|属性值] [输入文件|输出文件]";
+    private final static String CMD_TXT = "[usage java -jar JAXMLEditor.jar [-tag|-attr] [-i|-r|-m] [标签名|标签唯一ID|属性名|属性值] [输入文件|输出文件]";
 
     public static void main(String[] args) {
 
