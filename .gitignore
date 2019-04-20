@@ -16,7 +16,6 @@ proguard/*
 .gradle/*
 gradle/*
 projectFilesBackup/*
-
 lint.xml
 **/lint.xml
 auto.prop
